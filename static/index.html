@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>System Monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #f0f2f5;
+      --card-bg: #ffffff;
+      --accent: #007bff;
+      --success: #28a745;
+      --danger: #dc3545;
+      --text: #333;
+    }
+
+    body {
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .status {
+      text-align: center;
+      padding: 10px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      font-weight: bold;
+    }
+
+    .connected {
+      background-color: #d4edda;
+      color: var(--success);
+    }
+
+    .disconnected {
+      background-color: #f8d7da;
+      color: var(--danger);
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    .metric-card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
+      transition: 0.3s ease;
+    }
+
+    .metric-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+    }
+
+    .metric-card h2 {
+      font-size: 1.2rem;
+      margin-bottom: 10px;
+    }
+
+    .metric-value {
+      font-size: 1.4rem;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+
+    .chart-container {
+      height: 200px;
+      margin-top: 10px;
+    }
+
+    .metric-icon {
+      font-size: 1.4rem;
+      margin-right: 8px;
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 System Monitoring Dashboard</h1>
+  <div id="connectionStatus" class="status disconnected">Status: Disconnected</div>
+
+  <div class="dashboard">
+    <div class="metric-card">
+      <h2><span class="metric-icon">🧠</span>CPU Usage</h2>
+      <div class="metric-value"><span id="cpuValue">0</span>%</div>
+      <div class="chart-container"><canvas id="cpuChart"></canvas></div>
+    </div>
+
+    <div class="metric-card">
+      <h2><span class="metric-icon">💾</span>Memory Usage</h2>
+      <div class="metric-value">
+        <span id="memValue">0</span>GB / <span id="totalMemValue">0</span>GB 
+        (<span id="memPercent">0</span>%)
+      </div>
+      <div class="chart-container"><canvas id="memoryChart"></canvas></div>
+    </div>
+
+    <div class="metric-card">
+      <h2><span class="metric-icon">🗄️</span>Disk Usage</h2>
+      <div class="metric-value">
+        <span id="diskUsed">0</span>GB / <span id="diskTotal">0</span>GB 
+        (<span id="diskPercent">0</span>%)
+      </div>
+      <div class="chart-container"><canvas id="diskChart"></canvas></div>
+    </div>
+
+    <div class="metric-card">
+      <h2><span class="metric-icon">🌐</span>Network Traffic</h2>
+      <div class="metric-value">
+        Sent: <span id="netSent">0</span> MB<br>
+        Received: <span id="netRecv">0</span> MB
+      </div>
+      <div class="chart-container"><canvas id="netChart"></canvas></div>
+    </div>
+  </div>
+
+  <script>
+    const cpuChart = new Chart(document.getElementById('cpuChart'), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'CPU %',
+          data: [],
+          borderColor: '#007bff',
+          backgroundColor: 'rgba(0,123,255,0.1)',
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 100 } } }
+    });
+
+    const memChart = new Chart(document.getElementById('memoryChart'), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Memory Used (GB)',
+          data: [],
+          borderColor: '#28a745',
+          backgroundColor: 'rgba(40,167,69,0.1)',
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    const diskChart = new Chart(document.getElementById('diskChart'), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Disk Used (GB)',
+          data: [],
+          borderColor: '#6f42c1',
+          backgroundColor: 'rgba(111,66,193,0.1)',
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    const netChart = new Chart(document.getElementById('netChart'), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Sent (MB)',
+            data: [],
+            borderColor: '#fd7e14',
+            backgroundColor: 'rgba(253,126,20,0.1)',
+            fill: true,
+            tension: 0.3
+          },
+          {
+            label: 'Received (MB)',
+            data: [],
+            borderColor: '#20c997',
+            backgroundColor: 'rgba(32,201,151,0.1)',
+            fill: true,
+            tension: 0.3
+          }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    const maxPoints = 30;
+    const metrics = {
+      labels: [],
+      cpu: [],
+      mem: [],
+      disk: [],
+      netSent: [],
+      netRecv: []
+    };
+
+    const statusElement = document.getElementById('connectionStatus');
+
+    function connectWebSocket() {
+      const socket = new WebSocket(`ws://${window.location.host}/ws`);
+
+      socket.onopen = () => {
+        statusElement.textContent = 'Status: Connected';
+        statusElement.className = 'status connected';
+      };
+
+      socket.onerror = () => {
+        statusElement.textContent = 'Status: Connection error';
+        statusElement.className = 'status disconnected';
+      };
+
+      socket.onclose = () => {
+        statusElement.textContent = 'Status: Disconnected - Reconnecting...';
+        statusElement.className = 'status disconnected';
+        setTimeout(connectWebSocket, 3000);
+      };
+
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const label = new Date(data.timestamp).toLocaleTimeString();
+
+        if (metrics.labels.length >= maxPoints) {
+          metrics.labels.shift();
+          metrics.cpu.shift();
+          metrics.mem.shift();
+          metrics.disk.shift();
+          metrics.netSent.shift();
+          metrics.netRecv.shift();
+        }
+
+        metrics.labels.push(label);
+        metrics.cpu.push(data.cpu_usage);
+        metrics.mem.push(data.memory_used);
+        metrics.disk.push(data.disk_used);
+        metrics.netSent.push(data.net_sent);
+        metrics.netRecv.push(data.net_recv);
+
+        updateValues(data);
+        updateCharts();
+      };
+    }
+
+    function updateValues(d) {
+      document.getElementById('cpuValue').textContent = d.cpu_usage.toFixed(1);
+      document.getElementById('memValue').textContent = d.memory_used.toFixed(2);
+      document.getElementById('totalMemValue').textContent = d.memory_total.toFixed(2);
+      document.getElementById('memPercent').textContent = d.memory_usage.toFixed(1);
+      document.getElementById('diskUsed').textContent = d.disk_used.toFixed(2);
+      document.getElementById('diskTotal').textContent = d.disk_total.toFixed(2);
+      document.getElementById('diskPercent').textContent = d.disk_usage.toFixed(1);
+      document.getElementById('netSent').textContent = d.net_sent.toFixed(2);
+      document.getElementById('netRecv').textContent = d.net_recv.toFixed(2);
+    }
+
+    function updateCharts() {
+      cpuChart.data.labels = [...metrics.labels];
+      cpuChart.data.datasets[0].data = [...metrics.cpu];
+      cpuChart.update();
+
+      memChart.data.labels = [...metrics.labels];
+      memChart.data.datasets[0].data = [...metrics.mem];
+      memChart.update();
+
+      diskChart.data.labels = [...metrics.labels];
+      diskChart.data.datasets[0].data = [...metrics.disk];
+      diskChart.update();
+
+      netChart.data.labels = [...metrics.labels];
+      netChart.data.datasets[0].data = [...metrics.netSent];
+      netChart.data.datasets[1].data = [...metrics.netRecv];
+      netChart.update();
+    }
+
+    connectWebSocket();
+  </script>
+</body>
+</html>
